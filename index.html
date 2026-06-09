@@ -19,33 +19,56 @@
         .ping-container {
             text-align: center;
             background: white;
-            padding: 50px 40px;
+            padding: 40px 30px;
             border-radius: 16px;
             box-shadow: 0 10px 25px rgba(0,0,0,0.05);
-            max-width: 400px;
+            width: 100%;
+            max-width: 360px;
+            box-sizing: border-box;
         }
         .title {
-            font-size: 20px;
+            font-size: 18px;
             font-weight: 600;
-            color: #555;
-            margin-bottom: 10px;
+            color: #666;
+            margin-bottom: 5px;
         }
         .ping-value {
-            font-size: 80px;
+            font-size: 72px;
             font-weight: bold;
             color: #007bff;
-            margin: 10px 0;
+            margin: 5px 0;
             transition: color 0.3s ease;
         }
         .ping-unit {
             font-size: 24px;
             color: #888;
             font-weight: normal;
+            margin-left: 2px;
+        }
+        .stats-container {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            font-size: 14px;
+            color: #555;
+            margin-bottom: 20px;
+            font-weight: 500;
+        }
+        .stats-label {
+            color: #888;
+        }
+        #graphCanvas {
+            width: 100%;
+            height: 100px;
+            background-color: #f8fafc;
+            border-radius: 8px;
+            border: 1px solid #e2e8f0;
+            display: block;
         }
         .info {
-            font-size: 14px;
+            font-size: 13px;
             color: #666;
-            line-height: 1.6;
+            line-height: 1.5;
             margin-top: 20px;
         }
     </style>
@@ -55,52 +78,116 @@
     <div class="ping-container">
         <div class="title">Internet Reliability</div>
         <div class="ping-value" id="pingDisplay">--<span class="ping-unit">ms</span></div>
+        
+        <div class="stats-container">
+            <div><span class="stats-label">1m Avg:</span> <span id="avgDisplay">--</span><span style="color:#888">ms</span></div>
+        </div>
+
+        <canvas id="graphCanvas" width="640" height="200"></canvas>
+
         <div class="info">
-            Measuring the round-trip time from your computer to the internet. Ping times should be stable and less than 100 ms.
+            The graph displays your latency history over the last 60 seconds. Spikes indicate temporary network congestion or Wi-Fi jitter.
         </div>
     </div>
 
     <script>
         const pingDisplay = document.getElementById('pingDisplay');
-        
+        const avgDisplay = document.getElementById('avgDisplay');
+        const canvas = document.getElementById('graphCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // 60 seconds / 1.5s interval = 40 data points max
+        const MAX_DATA_POINTS = 40; 
+        const pingHistory = [];
+
         async function measurePing() {
-            // Start the timer
             const start = performance.now();
             
             try {
-                // We use the Fetch API to make a lightweight HTTP HEAD request to the current URL.
-                // The cache-busting query parameter (?_t=...) ensures we don't load a cached version.
                 await fetch(window.location.href.split('?')[0] + '?_t=' + Date.now(), {
                     method: 'HEAD',
-                    cache: 'no-store' // Strictly prevent caching
+                    cache: 'no-store'
                 });
                 
-                // Stop the timer
                 const end = performance.now();
                 const pingTime = Math.round(end - start);
                 
-                // Update the UI
+                // Update current display
                 pingDisplay.innerHTML = `${pingTime}<span class="ping-unit">ms</span>`;
-                
-                // Optional: Change color based on connection quality
-                if (pingTime < 60) {
-                    pingDisplay.style.color = '#10b981'; // Green (Excellent)
-                } else if (pingTime < 150) {
-                    pingDisplay.style.color = '#f59e0b'; // Yellow (Acceptable)
-                } else {
-                    pingDisplay.style.color = '#ef4444'; // Red (Poor)
+                updateColor(pingTime, pingDisplay);
+
+                // Add to history and maintain 1-minute window
+                pingHistory.push(pingTime);
+                if (pingHistory.length > MAX_DATA_POINTS) {
+                    pingHistory.shift();
                 }
+
+                // Calculate and update average
+                const sum = pingHistory.reduce((a, b) => a + b, 0);
+                const avgTime = Math.round(sum / pingHistory.length);
+                avgDisplay.textContent = avgTime;
+
+                // Redraw the history graph
+                drawGraph();
+
             } catch (error) {
-                // If the internet connection drops entirely
                 pingDisplay.innerHTML = `Err<span class="ping-unit"></span>`;
                 pingDisplay.style.color = '#ef4444';
             }
         }
 
-        // Measure ping once immediately...
-        measurePing();
+        function updateColor(value, element) {
+            if (value < 60) element.style.color = '#10b981';      // Green
+            else if (value < 150) element.style.color = '#f59e0b'; // Yellow
+            else element.style.color = '#ef4444';                  // Red
+        }
 
-        // ...and then keep measuring every 1.5 seconds (1500 ms)
+        function drawGraph() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            if (pingHistory.length === 0) return;
+
+            // Determine the maximum scale dynamically (with a minimum ceiling of 100ms)
+            const maxPingInHistory = Math.max(...pingHistory);
+            const yMax = Math.max(100, maxPingInHistory * 1.2); 
+
+            const paddingLeft = 10;
+            const paddingRight = 10;
+            const graphWidth = canvas.width - paddingLeft - paddingRight;
+            
+            // Calculate X steps based on total possible points so the graph builds left-to-right
+            const xStep = graphWidth / (MAX_DATA_POINTS - 1);
+
+            // Begin Drawing Line
+            ctx.beginPath();
+            ctx.lineWidth = 4;
+            ctx.lineJoin = 'round';
+            ctx.lineCap = 'round';
+            ctx.strokeStyle = '#007bff';
+
+            pingHistory.forEach((ping, index) => {
+                const x = paddingLeft + (index * xStep);
+                // Invert Y because canvas (0,0) is top-left
+                const y = canvas.height - ((ping / yMax) * (canvas.height - 20)) - 10; 
+
+                if (index === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            });
+            ctx.stroke();
+
+            // Create Gradient Area Fill underneath the line
+            ctx.lineTo(paddingLeft + ((pingHistory.length - 1) * xStep), canvas.height);
+            ctx.lineTo(paddingLeft, canvas.height);
+            ctx.closePath();
+            
+            const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+            gradient.addColorStop(0, 'rgba(0, 123, 255, 0.2)');
+            gradient.addColorStop(1, 'rgba(0, 123, 255, 0.0)');
+            ctx.fillStyle = gradient;
+            ctx.fill();
+        }
+
+        // Run instantly on load, then loop
+        measurePing();
         setInterval(measurePing, 1500);
     </script>
 </body>
