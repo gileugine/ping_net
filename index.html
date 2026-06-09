@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Browser Ping Clone</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f9fafb;
+            color: #333;
+        }
+        .ping-container {
+            text-align: center;
+            background: white;
+            padding: 50px 40px;
+            border-radius: 16px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.05);
+            max-width: 400px;
+        }
+        .title {
+            font-size: 20px;
+            font-weight: 600;
+            color: #555;
+            margin-bottom: 10px;
+        }
+        .ping-value {
+            font-size: 80px;
+            font-weight: bold;
+            color: #007bff;
+            margin: 10px 0;
+            transition: color 0.3s ease;
+        }
+        .ping-unit {
+            font-size: 24px;
+            color: #888;
+            font-weight: normal;
+        }
+        .info {
+            font-size: 14px;
+            color: #666;
+            line-height: 1.6;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="ping-container">
+        <div class="title">Internet Reliability</div>
+        <div class="ping-value" id="pingDisplay">--<span class="ping-unit">ms</span></div>
+        <div class="info">
+            Measuring the round-trip time from your computer to the internet. Ping times should be stable and less than 100 ms.
+        </div>
+    </div>
+
+    <script>
+        const pingDisplay = document.getElementById('pingDisplay');
+        
+        async function measurePing() {
+            // Start the timer
+            const start = performance.now();
+            
+            try {
+                // We use the Fetch API to make a lightweight HTTP HEAD request to the current URL.
+                // The cache-busting query parameter (?_t=...) ensures we don't load a cached version.
+                await fetch(window.location.href.split('?')[0] + '?_t=' + Date.now(), {
+                    method: 'HEAD',
+                    cache: 'no-store' // Strictly prevent caching
+                });
+                
+                // Stop the timer
+                const end = performance.now();
+                const pingTime = Math.round(end - start);
+                
+                // Update the UI
+                pingDisplay.innerHTML = `${pingTime}<span class="ping-unit">ms</span>`;
+                
+                // Optional: Change color based on connection quality
+                if (pingTime < 60) {
+                    pingDisplay.style.color = '#10b981'; // Green (Excellent)
+                } else if (pingTime < 150) {
+                    pingDisplay.style.color = '#f59e0b'; // Yellow (Acceptable)
+                } else {
+                    pingDisplay.style.color = '#ef4444'; // Red (Poor)
+                }
+            } catch (error) {
+                // If the internet connection drops entirely
+                pingDisplay.innerHTML = `Err<span class="ping-unit"></span>`;
+                pingDisplay.style.color = '#ef4444';
+            }
+        }
+
+        // Measure ping once immediately...
+        measurePing();
+
+        // ...and then keep measuring every 1.5 seconds (1500 ms)
+        setInterval(measurePing, 1500);
+    </script>
+</body>
+</html>
